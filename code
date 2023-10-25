@@ -1,0 +1,48 @@
+import os
+import logging
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from google.cloud import vision
+from google.cloud.vision import types
+
+# Встановіть ваш токен бота і ключ API Google Cloud Vision
+TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+GOOGLE_CLOUD_API_KEY = 'YOUR_GOOGLE_CLOUD_API_KEY'
+
+# Ініціалізація Telegram-бота
+updater = Updater(token=TELEGRAM_BOT_TOKEN, use_context=True)
+dispatcher = updater.dispatcher
+
+# Ініціалізація Google Cloud Vision API
+client = vision.ImageAnnotatorClient.from_service_account_file(GOOGLE_CLOUD_API_KEY)
+
+# Обробник команди /start
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Вітаю! Надішліть мені фото, і я спробую знайти об'єкти на ньому.")
+
+# Обробник зображень
+def process_image(update: Update, context: CallbackContext):
+    photo = update.message.photo[-1].get_file()
+    photo.download('image.jpg')
+
+    # Використовуємо Google Cloud Vision API для аналізу зображення
+    with open('image.jpg', 'rb') as image_file:
+        content = image_file.read()
+    image = types.Image(content=content)
+    response = client.label_detection(image=image)
+
+    labels = response.label_annotations
+
+    if labels:
+        label_strings = [label.description for label in labels]
+        update.message.reply_text(f"Об'єкти на зображенні: {', '.join(label_strings)}")
+    else:
+        update.message.reply_text("На жаль, не вдалося знайти об'єкти на цьому зображенні.")
+
+# Додаємо обробники команд та повідомлень
+dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(MessageHandler(Filters.photo, process_image))
+
+# Запускаємо бота
+updater.start_polling()
+updater.idle()
